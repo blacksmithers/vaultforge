@@ -1,11 +1,18 @@
 {
-  "name": "obsidian-forge-mcp",
+  "name": "@blacksmithers/obsidian-forge-mcp",
   "version": "1.0.0",
   "description": "Blazing-fast local MCP server for Obsidian vault operations via stdio",
   "type": "module",
   "bin": {
     "obsidian-forge-mcp": "./dist/index.js"
   },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsc",
     "dev": "tsx src/index.ts",
