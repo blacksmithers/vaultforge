@@ -5,7 +5,7 @@
 <h3 align="center">The most capable MCP server for Obsidian.</h3>
 
 <p align="center">
-  <strong>20 tools</strong> · Canvas with auto-layout · BM25 smart search · Vault intelligence<br/>
+  <strong>25 tools</strong> · Canvas with auto-layout · BM25 smart search · Vault intelligence<br/>
   No Obsidian plugin required · Works on macOS, Linux, Windows
 </p>
 
@@ -13,7 +13,7 @@
   <a href="#canvas-tools">Canvas</a> ·
   <a href="#smart-search">Search</a> ·
   <a href="#vault-intelligence">Intelligence</a> ·
-  <a href="#all-tools">All 20 Tools</a> ·
+  <a href="#all-tools">All 25 Tools</a> ·
   <a href="#quick-start">Quick Start</a>
 </p>
 
@@ -42,6 +42,10 @@ obsidian-forge does all three.
 | **BM25 smart search (Orama)** | ✅ | ❌ | ❌ | ❌ |
 | **Vault theme mapping (TF-IDF)** | ✅ | ❌ | ❌ | ❌ |
 | **Vault reorganization engine** | ✅ | ❌ | ❌ | ❌ |
+| **Regex find-and-replace (grep-sub)** | ✅ | ❌ | ❌ | ❌ |
+| **Batch rename / move with link updates** | ✅ | ❌ | ❌ | ❌ |
+| **Backlink analysis** | ✅ | ❌ | ❌ | ❌ |
+| **Frontmatter as structured data** | ✅ | ❌ | ❌ | ❌ |
 | No Obsidian plugin required | ✅ | ❌ | ✅ | ❌ |
 
 ---
@@ -174,12 +178,13 @@ The vault maps itself.
 
 ## All Tools
 
-### Notes (5)
+### Notes (6)
 | Tool | What it does |
 |------|-------------|
 | `read_note` | Read content + metadata. Fuzzy path resolution. |
 | `write_note` | Create or overwrite. |
-| `edit_note` | In-place find and replace. |
+| `edit_note` | In-place find and replace. Exact match, must be unique. |
+| `edit_regex` | Regex find-and-replace. Single file or grep-sub across vault. Capture groups, dry run. |
 | `append_note` | Append to existing, or create if missing. |
 | `delete_note` | Move to `.trash` (safe) or permanent. |
 
@@ -190,10 +195,26 @@ The vault maps itself.
 | `search_reindex` | Force re-index after bulk operations. |
 | `search_vault` | Fast filename/path search from in-memory index. |
 | `search_content` | Full-text grep. For exact/literal matches. |
-| `list_dir` | Directory listing with glob filtering. |
+| `list_dir` | Directory listing with created/modified timestamps. Sort by name, date, or size. |
 | `recent_notes` | Recently modified files. Instant from index. |
 | `daily_note` | Today's daily note (or any date). |
 | `vault_status` | File counts, types, index health. |
+
+### Files (1)
+| Tool | What it does |
+|------|-------------|
+| `batch_rename` | Rename/move files. Explicit pairs or regex patterns. Auto-updates wikilinks. Dry run default. |
+
+### Links (2)
+| Tool | What it does |
+|------|-------------|
+| `update_links` | Update all wikilinks across vault after moving/renaming a file. Dry run default. |
+| `backlinks` | Find all files that link to a given file. Line numbers, context, embed detection. |
+
+### Metadata (1)
+| Tool | What it does |
+|------|-------------|
+| `frontmatter` | Read/write/merge YAML frontmatter as structured data. No string parsing needed. |
 
 ### Canvas (4)
 | Tool | What it does |
@@ -212,7 +233,7 @@ The vault maps itself.
 ### Batch (1)
 | Tool | What it does |
 |------|-------------|
-| `batch` | Execute multiple operations in a single call. |
+| `batch` | Execute multiple operations — read, write, edit, regex, rename, frontmatter, delete. |
 
 ---
 
@@ -285,6 +306,11 @@ Ask your AI assistant: *"List the files in my vault"* — if it responds with yo
   ├── canvas_create     semantic graph → positioned canvas
   ├── canvas_patch      relative edits → absolute coordinates
   └── canvas_relayout   messy canvas → optimized layout
+
+Wikilink engine (zero dependencies)
+  ├── update_links      safe moves with automatic link repair
+  ├── backlinks         impact analysis before moves/deletes
+  └── batch_rename      rename + link update in one operation
 ```
 
 ### Dependencies
@@ -301,7 +327,16 @@ Two packages. Both MIT, TypeScript-native, zero sub-dependencies:
 ```
 src/
 ├── tools/
-│   ├── notes/                  read, write, edit, append, delete
+│   ├── notes/                  read, write, edit, edit_regex, append, delete
+│   │   └── edit-regex.ts             regex find-and-replace
+│   ├── files/                  rename, move
+│   │   └── batch-rename.ts           rename/move with link updates
+│   ├── links/                  wikilink management
+│   │   ├── link-utils.ts             shared wikilink regex engine
+│   │   ├── update-links.ts           fix links after moves
+│   │   └── backlinks.ts              impact analysis
+│   ├── metadata/               frontmatter operations
+│   │   └── frontmatter.ts            read/write/merge YAML frontmatter
 │   ├── search/                 search_vault, search_content, list_dir, recent, daily, status
 │   │   ├── smart-search.ts           BM25 search via Orama
 │   │   ├── search-reindex.ts         full/incremental re-index

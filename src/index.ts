@@ -3,7 +3,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { readFile, writeFile, mkdir, unlink, appendFile, rm } from "node:fs/promises";
+import { readFile, writeFile, mkdir, unlink, appendFile, rm, rename } from "node:fs/promises";
 import path from "node:path";
 import { execSync } from "node:child_process";
 import { VaultIndex } from "./vault-index.js";
@@ -15,6 +15,11 @@ import { registerSmartSearch } from "./tools/search/smart-search.js";
 import { registerSearchReindex } from "./tools/search/search-reindex.js";
 import { registerVaultThemes } from "./tools/intelligence/vault-themes.js";
 import { registerVaultSuggest } from "./tools/intelligence/vault-suggest.js";
+import { registerEditRegex } from "./tools/notes/edit-regex.js";
+import { registerBatchRename } from "./tools/files/batch-rename.js";
+import { registerUpdateLinks, updateWikilinks } from "./tools/links/update-links.js";
+import { registerBacklinks } from "./tools/links/backlinks.js";
+import { registerFrontmatter, parseFrontmatter, serializeFrontmatter } from "./tools/metadata/frontmatter.js";
 
 // ── Config ─────────────────────────────────────────────────────────
 
@@ -27,7 +32,7 @@ if (!VAULT_PATH) {
 const vault = new VaultIndex(VAULT_PATH);
 const server = new McpServer({
   name: "obsidian-forge-mcp",
-  version: "1.0.0",
+  version: "0.2.0",
 });
 
 // ── Helpers ─────────────────────────────────────────────────────────
@@ -248,13 +253,15 @@ server.tool(
 // 7. LIST DIRECTORY
 server.tool(
   "list_dir",
-  "List files in a vault directory. Returns indexed metadata without reading file contents.",
+  "List files in a vault directory. Returns indexed metadata with created/modified timestamps. Sort by name, date, or size.",
   {
     path: z.string().default(".").describe("Relative directory path (default: vault root)"),
     recursive: z.boolean().default(false).describe("Include subdirectories recursively"),
     pattern: z.string().optional().describe("Glob pattern to filter (e.g. '*.md', '**/*.canvas')"),
+    sort_by: z.enum(["name", "created", "modified", "size"]).default("name").describe("Sort field (default: name)"),
+    sort_order: z.enum(["asc", "desc"]).default("asc").describe("Sort order (default: asc)"),
   },
-  async ({ path: dirPath, recursive, pattern }) => {
+  async ({ path: dirPath, recursive, pattern, sort_by, sort_order }) => {
     await vault.waitReady();
 
     let files;
@@ -267,12 +274,25 @@ server.tool(
       files = vault.listDir(dirPath);
     }
 
-    const listing = files.map((f) => ({
+    let listing = files.map((f) => ({
       path: f.rel,
       ext: f.ext,
       size: f.size,
+      created: new Date(f.ctime).toISOString(),
       modified: new Date(f.mtime).toISOString(),
     }));
+
+    // Sort
+    listing.sort((a, b) => {
+      switch (sort_by) {
+        case "name":     return a.path.localeCompare(b.path);
+        case "created":  return new Date(a.created).getTime() - new Date(b.created).getTime();
+        case "modified": return new Date(a.modified).getTime() - new Date(b.modified).getTime();
+        case "size":     return a.size - b.size;
+        default:         return 0;
+      }
+    });
+    if (sort_order === "desc") listing.reverse();
 
     return {
       content: [
@@ -436,11 +456,31 @@ const BatchOpSchema = z.discriminatedUnion("op", [
     path: z.string(),
     permanent: z.boolean().default(false),
   }),
+  z.object({
+    op: z.literal("rename"),
+    from: z.string(),
+    to: z.string(),
+    update_links: z.boolean().default(true),
+  }),
+  z.object({
+    op: z.literal("edit_regex"),
+    path: z.string(),
+    match: z.string(),
+    replace: z.string(),
+    flags: z.string().default("g"),
+  }),
+  z.object({
+    op: z.literal("frontmatter"),
+    path: z.string(),
+    action: z.enum(["read", "set", "merge", "delete_keys"]),
+    data: z.record(z.string(), z.any()).optional(),
+    keys: z.array(z.string()).optional(),
+  }),
 ]);
 
 server.tool(
   "batch",
-  "Execute multiple vault operations in a single call. Supports: read, write, append, edit, delete. Each operation runs sequentially. Returns results array.",
+  "Execute multiple vault operations in a single call. Supports: read, write, append, edit, delete, rename, edit_regex, frontmatter. Sequential execution. Returns results array.",
   {
     operations: z.array(BatchOpSchema).min(1).max(50).describe("Array of operations to execute"),
   },
@@ -513,6 +553,74 @@ server.tool(
               await unlink(resolved.abs);
             }
             results.push({ index: i, op: "delete", status: "ok", detail: `Deleted: ${resolved.rel}` });
+            break;
+          }
+          case "rename": {
+            const fromResolved = vault.resolve(op.from);
+            const fromRel = fromResolved?.rel ?? op.from;
+            const fromAbs = path.join(VAULT_PATH!, fromRel);
+            const toAbs = path.join(VAULT_PATH!, op.to);
+            await mkdir(path.dirname(toAbs), { recursive: true });
+            await rename(fromAbs, toAbs);
+            let linksUpdated = 0;
+            if (op.update_links) {
+              const linkResult = await updateWikilinks(VAULT_PATH!, vault, fromRel, op.to, false);
+              linksUpdated = linkResult.totalLinks;
+            }
+            results.push({ index: i, op: "rename", status: "ok", detail: `Renamed: ${fromRel} → ${op.to} (${linksUpdated} links updated)` });
+            break;
+          }
+          case "edit_regex": {
+            const resolved = resolveOrFail(op.path);
+            const content = await readFile(resolved.abs, "utf-8");
+            let regex: RegExp;
+            try {
+              regex = new RegExp(op.match, op.flags);
+            } catch (err: any) {
+              results.push({ index: i, op: "edit_regex", status: "error", detail: `Invalid regex: ${err.message}` });
+              break;
+            }
+            const newContent = content.replace(regex, op.replace);
+            if (newContent === content) {
+              results.push({ index: i, op: "edit_regex", status: "ok", detail: `No matches in ${resolved.rel}` });
+            } else {
+              await writeFile(resolved.abs, newContent, "utf-8");
+              results.push({ index: i, op: "edit_regex", status: "ok", detail: `Regex applied to ${resolved.rel}` });
+            }
+            break;
+          }
+          case "frontmatter": {
+            const resolved = resolveOrFail(op.path);
+            let content: string;
+            try { content = await readFile(resolved.abs, "utf-8"); } catch { content = ""; }
+            const parsed = parseFrontmatter(content);
+            switch (op.action) {
+              case "read":
+                results.push({ index: i, op: "frontmatter", status: "ok", detail: resolved.rel, content: JSON.stringify(parsed.frontmatter) });
+                break;
+              case "set":
+                if (op.data) {
+                  await writeFile(resolved.abs, serializeFrontmatter(op.data) + "\n" + parsed.body, "utf-8");
+                  results.push({ index: i, op: "frontmatter", status: "ok", detail: `Set frontmatter: ${resolved.rel}` });
+                }
+                break;
+              case "merge":
+                if (op.data) {
+                  const merged = { ...parsed.frontmatter, ...op.data };
+                  await writeFile(resolved.abs, serializeFrontmatter(merged) + "\n" + parsed.body, "utf-8");
+                  results.push({ index: i, op: "frontmatter", status: "ok", detail: `Merged frontmatter: ${resolved.rel}` });
+                }
+                break;
+              case "delete_keys":
+                if (op.keys) {
+                  const updated = { ...parsed.frontmatter };
+                  for (const key of op.keys) delete updated[key];
+                  const newFm = Object.keys(updated).length > 0 ? serializeFrontmatter(updated) + "\n" + parsed.body : parsed.body;
+                  await writeFile(resolved.abs, newFm, "utf-8");
+                  results.push({ index: i, op: "frontmatter", status: "ok", detail: `Deleted keys from ${resolved.rel}` });
+                }
+                break;
+            }
             break;
           }
         }
@@ -598,6 +706,14 @@ registerCanvasCreate(server, VAULT_PATH!, vault);
 registerCanvasRead(server, VAULT_PATH!, vault);
 registerCanvasPatch(server, VAULT_PATH!, vault);
 registerCanvasRelayout(server, VAULT_PATH!, vault);
+
+// ── File & Link Tools ──────────────────────────────────────────────
+
+registerEditRegex(server, VAULT_PATH!, vault);
+registerBatchRename(server, VAULT_PATH!, vault);
+registerUpdateLinks(server, VAULT_PATH!, vault);
+registerBacklinks(server, VAULT_PATH!, vault);
+registerFrontmatter(server, VAULT_PATH!, vault);
 
 // ── Search & Intelligence Tools ────────────────────────────────────
 

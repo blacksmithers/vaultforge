@@ -13,6 +13,8 @@ export interface FileEntry {
   ext: string;
   /** Parent directory relative to vault */
   dir: string;
+  /** Created timestamp (ms) */
+  ctime: number;
   /** Last modified timestamp (ms) */
   mtime: number;
   /** File size in bytes */
@@ -208,6 +210,7 @@ export class VaultIndex {
       stem,
       ext: parsed.ext,
       dir,
+      ctime: st.birthtimeMs,
       mtime: st.mtimeMs,
       size: st.size,
     };
