@@ -279,15 +279,17 @@ The vault maps itself.
 
 ### Claude Desktop (one-click)
 
-Download the `.mcpb` file from the [latest release](https://github.com/blacksmithers/vaultforge/releases/latest) and double-click to install:
+**Windows** — [⬇ Download vaultforge.mcpb](https://github.com/blacksmithers/vaultforge/releases/latest/download/vaultforge.mcpb) — open the file, enter your vault path, done.
 
-| Platform | File |
-|----------|------|
-| Windows | `vaultforge.mcpb` |
-| macOS | `vaultforge.mcpb` |
-| Linux | `vaultforge.mcpb` |
+**macOS:**
+```bash
+curl -fsSL https://github.com/blacksmithers/vaultforge/releases/latest/download/vaultforge.mcpb -o /tmp/vaultforge.mcpb && open /tmp/vaultforge.mcpb
+```
 
-Claude Desktop will prompt you for your vault path during installation.
+**Linux:**
+```bash
+curl -fsSL https://github.com/blacksmithers/vaultforge/releases/latest/download/vaultforge.mcpb -o /tmp/vaultforge.mcpb && xdg-open /tmp/vaultforge.mcpb
+```
 
 ### Claude Code
 
