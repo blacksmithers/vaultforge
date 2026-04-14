@@ -4,7 +4,8 @@
   "description": "Blazing-fast local MCP server for Obsidian vault operations via stdio",
   "type": "module",
   "bin": {
-    "vaultforge": "./dist/index.js"
+    "vaultforge": "./dist/index.js",
+    "vault-cli": "./dist/skills.js"
   },
   "publishConfig": {
     "access": "public"
@@ -23,7 +24,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "inspect": "npx -y @modelcontextprotocol/inspector node dist/index.js"
+    "inspect": "npx -y @modelcontextprotocol/inspector node dist/index.js",
+    "skills": "tsx src/skills.ts"
   },
   "repository": {
     "type": "git",

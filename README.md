@@ -20,6 +20,7 @@
   <a href="#canvas-tools">Canvas</a> ·
   <a href="#smart-search">Search</a> ·
   <a href="#vault-intelligence">Intelligence</a> ·
+  <a href="#vault-cli--agent-skills">CLI Skills</a> ·
   <a href="#all-tools">All 27 Tools</a> ·
   <a href="#install">Install</a>
 </p>
@@ -350,6 +351,33 @@ Edit `claude_desktop_config.json`:
 ### Verify
 
 Ask your AI assistant: *"List the files in my vault"* — if it responds with your vault contents, you're connected.
+
+---
+
+## ⚡ VaultForge CLI & Agent Skills
+
+VaultForge now includes a high-performance **CLI Skill System**, allowing AI agents to interact with your vault via lightning-fast, on-demand commands without a persistent server connection.
+
+### Zero-Latency Performance
+By using a **Disk-Based Index Cache** (`.vaultforge/vault-index-cache.json`), `vault-cli` eliminates file-system scan overhead. 
+*   **Response Time**: Sub-millisecond startup.
+*   **Parity**: 100% feature parity with the MCP Server.
+
+### Interactive Agent Setup
+Use the `setup skill` command to package VaultForge as a formal **AI Agent Skill** for tools like **Claude Code** and **Antigravity**.
+
+```bash
+# 1. Install globally
+npm install -g .  # or @blacksmithers/vaultforge
+
+# 2. Package for your agent
+vault-cli setup skill
+```
+
+*   **Claude Code**: Auto-configures in `.claude/skills/`.
+*   **Antigravity**: Auto-configures in `.agents/skills/`.
+
+This allows the agent to auto-detect your vault capabilities and documentation as soon as you open your project.
 
 ---
 

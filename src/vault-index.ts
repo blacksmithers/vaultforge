@@ -34,6 +34,12 @@ export interface DirEntry {
   mtime: number;
 }
 
+export interface SerializedIndex {
+  files: [string, FileEntry][];
+  byName: [string, string[]][];
+  byDir: [string, string[]][];
+}
+
 export class VaultIndex {
   /** rel path → FileEntry */
   private files = new Map<string, FileEntry>();
@@ -315,6 +321,24 @@ export class VaultIndex {
       totalDirs: this.byDir.size,
       extensions,
     };
+  }
+
+  /** Serialize index to a plain object */
+  serialize(): SerializedIndex {
+    return {
+      files: [...this.files.entries()],
+      byName: [...this.byName.entries()].map(([k, v]) => [k, [...v]]),
+      byDir: [...this.byDir.entries()].map(([k, v]) => [k, [...v]]),
+    };
+  }
+
+  /** Deserialize from a plain object */
+  deserialize(data: SerializedIndex): void {
+    this.files = new Map(data.files);
+    this.byName = new Map(data.byName.map(([k, v]) => [k, new Set(v)]));
+    this.byDir = new Map(data.byDir.map(([k, v]) => [k, new Set(v)]));
+    this.ready = true;
+    this.resolveReady();
   }
 
   // ── Resolve path (fuzzy) ───────────────────────────────────────────
